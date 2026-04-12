@@ -1,73 +1,98 @@
-# React + TypeScript + Vite
+# TTRPG Sound Manager
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+TTRPG Sound Manager is a web application for live RPG session audio control.
+It lets you build scenes, play multiple sounds in parallel, switch scenes with crossfade,
+and manage both local audio files and YouTube audio sources.
 
-Currently, two official plugins are available:
+## Key Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Multi-track playback with per-track controls
+- Scene-based workflow with fast scene switching
+- Configurable crossfade between scenes
+- Layer support (`ambient`, `music`, `sfx`)
+- Global hotkeys and per-track hotkeys
+- Sound library with search, filtering, favorites, and drag and drop
+- Drag and drop import from the operating system (audio files only)
+- YouTube source support (audio playback via YouTube IFrame API)
+- Session persistence in browser storage
 
-## React Compiler
+## Current Layout
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Top section: global controls and project settings
+- Left panel: scenes
+- Center panel: active scene tracks
+- Right panel: full sound library
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- shadcn/ui
+- Web Audio API (local files)
+- YouTube IFrame API (YouTube tracks)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting Started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Requirements
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Node.js 18+
+- npm
+
+### Install
+
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Run in development mode
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+### Build for production
+
+```bash
+npm run build
+```
+
+### Preview production build
+
+```bash
+npm run preview
+```
+
+## How Audio Sources Work
+
+### Local files
+
+- Imported from disk using file picker or drag and drop
+- Stored in IndexedDB
+- Played through Web Audio/HTML audio pipeline
+
+### YouTube
+
+- Added by URL
+- Controlled through YouTube IFrame API
+- Video is hidden in the app UI; audio is used for playback
+- Per-track volume slider and master volume both affect YouTube tracks
+
+## Hotkeys
+
+- `1-9`: switch scenes by scene list order
+- `Space`: play active scene or stop all
+- `Shift+Space`: panic stop
+- Custom per-track hotkeys are supported
+
+## Persistence
+
+The app stores session state in browser storage:
+
+- Local metadata: `localStorage`
+- Local audio files: `IndexedDB`
+
+Saved state includes scenes, tracks, volume settings, favorites, hotkeys,
+crossfade configuration, and source metadata.
+
