@@ -16,13 +16,6 @@ and manage both local audio files and YouTube audio sources.
 - YouTube source support (audio playback via YouTube IFrame API)
 - Session persistence in browser storage
 
-## Current Layout
-
-- Top section: global controls and project settings
-- Left panel: scenes
-- Center panel: active scene tracks
-- Right panel: full sound library
-
 ## Tech Stack
 
 - React
