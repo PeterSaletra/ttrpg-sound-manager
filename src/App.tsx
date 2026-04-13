@@ -1,37 +1,34 @@
-﻿import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  AlertTriangle,
-  Check,
-  GripVertical,
-  Keyboard,
-  Link2,
-  Pause,
-  Pencil,
-  Play,
-  Plus,
-  Search,
-  Skull,
-  Star,
-  Trash2,
-  Upload,
-  X,
-} from 'lucide-react'
-
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { ActiveSceneCard } from '@/components/app/ActiveSceneCard'
+import { FileDropOverlay } from '@/components/app/FileDropOverlay'
+import { ScenesCard } from '@/components/app/ScenesCard'
+import { SoundLibraryCard } from '@/components/app/SoundLibraryCard'
+import { ToastStack } from '@/components/app/ToastStack'
+import { TopControlsCard } from '@/components/app/TopControlsCard'
+import { YouTubeHostsMount } from '@/components/app/YouTubeHostsMount'
+import { useGlobalHotkeys } from '@/hooks/useGlobalHotkeys'
+import { useToastQueue } from '@/hooks/useToastQueue'
 import { Separator } from '@/components/ui/separator'
-import { Slider } from '@/components/ui/slider'
-import { Switch } from '@/components/ui/switch'
 import { AudioEngine } from '@/lib/audio-engine'
+import {
+  BUTTON_ACTIVE_CLASS,
+  BUTTON_UNIFIED_CLASS,
+  DEFAULT_CROSSFADE_DURATION_MS,
+  DEFAULT_CROSSFADE_LAYERS,
+  DEFAULT_LAYER,
+  HOTKEY_PRESETS,
+} from '@/lib/app-config'
+import {
+  AUDIO_EXTENSION_REGEX,
+  buildDragPayload,
+  createDefaultScene,
+  createId,
+  hasFilesInDragEvent,
+  extractYouTubeId,
+  normalizeHotkey,
+  parseDragPayload,
+  setTrackCardDragPreview,
+} from '@/lib/app-helpers'
 import {
   deleteAudioFile,
   loadAudioFile,
@@ -40,178 +37,8 @@ import {
   saveSession,
   toStoredTracks,
 } from '@/lib/storage'
+import type { YouTubePlayer } from '@/lib/youtube-types'
 import type { Scene, Track, TrackLayer } from '@/types'
-
-const DEFAULT_LAYER: TrackLayer = 'ambient'
-const DEFAULT_CROSSFADE_DURATION_MS = 1200
-const DEFAULT_CROSSFADE_LAYERS: Record<TrackLayer, boolean> = {
-  ambient: true,
-  music: true,
-  sfx: false,
-}
-
-const HOTKEY_PRESETS = {
-  combat: ['1', '2', '3', '4', '5', 'q', 'w', 'e', 'r'],
-  exploration: ['a', 's', 'd', 'f', 'g', 'z', 'x', 'c', 'v'],
-  horror: ['h', 'j', 'k', 'l', 'b', 'n', 'm', 'u', 'i'],
-} as const
-
-const BUTTON_UNIFIED_CLASS = 'border-zinc-500 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 hover:text-zinc-50'
-const BUTTON_ACTIVE_CLASS = 'bg-sky-300 text-zinc-950 hover:bg-sky-200 hover:text-zinc-950 border-sky-200'
-
-const createId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-const createDefaultScene = (): Scene => ({
-  id: createId(),
-  name: 'Start Scene',
-  trackIds: [],
-})
-
-const sliderToNumber = (value: number | readonly number[]): number =>
-  typeof value === 'number' ? value : (value[0] ?? 0)
-
-const buildDragPayload = (source: 'scene' | 'library', trackId: string): string =>
-  `${source}:${trackId}`
-
-const parseDragPayload = (value: string): { source: 'scene' | 'library'; trackId: string } | null => {
-  const [source, trackId] = value.split(':')
-  if (!trackId || (source !== 'scene' && source !== 'library')) {
-    return null
-  }
-
-  return { source, trackId }
-}
-
-const normalizeHotkey = (value: string): string => value.trim().toLowerCase()
-
-const AUDIO_EXTENSION_REGEX = /\.(mp3|wav|ogg|m4a|flac|aac|opus|webm)$/i
-
-const extractYouTubeId = (value: string): string | null => {
-  const input = value.trim()
-  if (!input) {
-    return null
-  }
-
-  const directId = input.match(/^[a-zA-Z0-9_-]{11}$/)
-  if (directId) {
-    return input
-  }
-
-  try {
-    const url = new URL(input)
-    const host = url.hostname.replace('www.', '')
-
-    if (host === 'youtu.be') {
-      const candidate = url.pathname.replace('/', '')
-      return candidate || null
-    }
-
-    if (host.includes('youtube.com')) {
-      if (url.searchParams.get('v')) {
-        return url.searchParams.get('v')
-      }
-
-      const parts = url.pathname.split('/').filter(Boolean)
-      const index = parts.findIndex((part) => part === 'embed' || part === 'shorts' || part === 'live')
-      if (index >= 0 && parts[index + 1]) {
-        return parts[index + 1]
-      }
-    }
-  } catch {
-    return null
-  }
-
-  return null
-}
-
-const eventToHotkey = (event: KeyboardEvent): string => {
-  const parts: string[] = []
-
-  if (event.ctrlKey) {
-    parts.push('ctrl')
-  }
-  if (event.altKey) {
-    parts.push('alt')
-  }
-  if (event.shiftKey) {
-    parts.push('shift')
-  }
-
-  const key = event.code === 'Space' ? 'space' : event.key.toLowerCase()
-  parts.push(key)
-
-  return parts.join('+')
-}
-
-const setTrackCardDragPreview = (event: DragEvent<HTMLElement>, trackCard: HTMLElement) => {
-  const rect = trackCard.getBoundingClientRect()
-  const clone = trackCard.cloneNode(true) as HTMLElement
-
-  clone.style.position = 'fixed'
-  clone.style.top = '-9999px'
-  clone.style.left = '-9999px'
-  clone.style.width = `${rect.width}px`
-  clone.style.opacity = '0.92'
-  clone.style.transform = 'scale(0.98)'
-  clone.style.pointerEvents = 'none'
-  clone.style.zIndex = '9999'
-
-  document.body.appendChild(clone)
-  event.dataTransfer.setDragImage(clone, 20, 20)
-
-  window.setTimeout(() => {
-    clone.remove()
-  }, 0)
-}
-
-type YouTubePlayerState = {
-  ENDED: number
-}
-
-type YouTubePlayer = {
-  playVideo: () => void
-  pauseVideo: () => void
-  stopVideo: () => void
-  setVolume: (volume: number) => void
-  cueVideoById: (videoId: string) => void
-  loadVideoById: (videoId: string) => void
-  destroy: () => void
-  getPlayerState: () => number
-  seekTo: (seconds: number, allowSeekAhead: boolean) => void
-}
-
-type YouTubePlayerEvent = {
-  target: YouTubePlayer
-  data?: number
-}
-
-type YouTubeApi = {
-  Player: new (
-    element: HTMLElement,
-    config: {
-      videoId: string
-      playerVars?: Record<string, string | number>
-      events?: {
-        onReady?: (event: YouTubePlayerEvent) => void
-        onStateChange?: (event: YouTubePlayerEvent) => void
-      }
-    },
-  ) => YouTubePlayer
-  PlayerState: YouTubePlayerState
-}
-
-declare global {
-  interface Window {
-    YT?: YouTubeApi
-    onYouTubeIframeAPIReady?: () => void
-  }
-}
 
 function App() {
   const [scenes, setScenes] = useState<Scene[]>(() => [createDefaultScene()])
@@ -219,7 +46,6 @@ function App() {
   const [activeSceneId, setActiveSceneId] = useState<string>('')
   const [masterVolume, setMasterVolume] = useState<number>(85)
   const [newSceneName, setNewSceneName] = useState<string>('')
-  const [toasts, setToasts] = useState<Array<{ id: string; text: string; tone: 'info' | 'error' }>>([])
   const [hydrated, setHydrated] = useState<boolean>(false)
   const [volumeOverrides, setVolumeOverrides] = useState<Record<string, number>>({})
   const [crossfadeDurationMs, setCrossfadeDurationMs] = useState<number>(DEFAULT_CROSSFADE_DURATION_MS)
@@ -246,6 +72,7 @@ function App() {
   const youtubeReadyRef = useRef<Set<string>>(new Set())
   const youtubeVideoByTrackRef = useRef<Map<string, string>>(new Map())
   const tracksRef = useRef<Track[]>([])
+  const { toasts, pushToast } = useToastQueue()
 
   const activeScene = useMemo(
     () => scenes.find((scene) => scene.id === activeSceneId) ?? scenes[0],
@@ -295,17 +122,6 @@ function App() {
       crossfadeTimeoutRef.current = null
     }
   }
-
-  const pushToast = (text: string, tone: 'info' | 'error' = 'info') => {
-    const toastId = createId()
-    setToasts((previous) => [...previous, { id: toastId, text, tone }])
-    window.setTimeout(() => {
-      setToasts((previous) => previous.filter((toast) => toast.id !== toastId))
-    }, 2600)
-  }
-
-  const hasFilesInDragEvent = (event: DragEvent<HTMLElement>): boolean =>
-    Array.from(event.dataTransfer.types).includes('Files')
 
   useEffect(() => {
     tracksRef.current = tracks
@@ -614,7 +430,7 @@ function App() {
     const skippedCount = allFiles.length - audioFiles.length
 
     if (audioFiles.length === 0) {
-      pushToast('Nie znaleziono poprawnych plikow audio do importu.', 'error')
+      pushToast('No valid audio files were found for import.', 'error')
       return
     }
 
@@ -663,12 +479,12 @@ function App() {
       )
 
       if (skippedCount > 0) {
-        pushToast(`Dodano ${importedTracks.length} plik(i) audio, pominieto ${skippedCount}.`, 'info')
+        pushToast(`Imported ${importedTracks.length} audio file(s), skipped ${skippedCount}.`, 'info')
       } else {
-        pushToast(`Dodano ${importedTracks.length} plik(i).`)
+        pushToast(`Imported ${importedTracks.length} file(s).`)
       }
     } catch {
-      pushToast('Nie udalo sie zaimportowac plikow audio.', 'error')
+      pushToast('Audio import failed.', 'error')
     }
   }
 
@@ -702,7 +518,7 @@ function App() {
       )
       updateTrack(track.id, (current) => ({ ...current, isPlaying: true }))
     } catch {
-      pushToast('Przegladarka zablokowala autoplay. Kliknij Play ponownie po interakcji.', 'error')
+      pushToast('The browser blocked autoplay. Click Play again after interacting with the page.', 'error')
     }
   }
 
@@ -749,7 +565,7 @@ function App() {
     )
 
     if (blocked) {
-      pushToast('Czesc dzwiekow zostala zablokowana przez autoplay policy.', 'error')
+      pushToast('Some tracks were blocked by the autoplay policy.', 'error')
     }
   }
 
@@ -828,7 +644,7 @@ function App() {
 
     const nextName = editingSceneName.trim()
     if (!nextName) {
-      pushToast('Nazwa sceny nie moze byc pusta.', 'error')
+      pushToast('Scene name cannot be empty.', 'error')
       return
     }
 
@@ -849,7 +665,7 @@ function App() {
 
   const handleDeleteScene = (sceneId: string) => {
     if (scenes.length <= 1) {
-      pushToast('Musi zostac przynajmniej jedna scena.', 'error')
+      pushToast('At least one scene must remain.', 'error')
       return
     }
 
@@ -876,7 +692,7 @@ function App() {
 
     const youtubeId = extractYouTubeId(youtubeInput)
     if (!youtubeId) {
-      pushToast('Niepoprawny link YouTube.', 'error')
+      pushToast('Invalid YouTube URL.', 'error')
       return
     }
 
@@ -908,7 +724,7 @@ function App() {
       ),
     )
     setYoutubeInput('')
-    pushToast('Dodano track YouTube do aktywnej sceny.')
+    pushToast('Added YouTube track to the active scene.')
   }
 
   const handleToggleFavorite = (trackId: string) => {
@@ -923,7 +739,7 @@ function App() {
     const duplicate = sceneTracks.some((track) => track.id !== trackId && normalizeHotkey(track.hotkey) === normalized)
 
     if (normalized && duplicate) {
-      pushToast(`Hotkey ${normalized} jest juz przypisany w tej scenie.`, 'error')
+      pushToast(`Hotkey ${normalized} is already assigned in this scene.`, 'error')
       return
     }
 
@@ -1033,7 +849,7 @@ function App() {
       ),
     )
 
-    pushToast(`Zastosowano preset hotkey: ${preset}.`)
+    pushToast(`Applied hotkey preset: ${preset}.`)
   }
 
   const toggleCrossfadeLayer = (layer: TrackLayer, checked: boolean) => {
@@ -1113,7 +929,7 @@ function App() {
         )
         immediateIncomingIds.push(track.id)
       } catch {
-        pushToast('Niektore tracki nie odpalily sie przez autoplay policy.', 'error')
+        pushToast('Some tracks could not start because of autoplay policy.', 'error')
       }
     }
 
@@ -1253,7 +1069,7 @@ function App() {
       })
 
       if (blocked) {
-        pushToast('Crossfade zakonczony. Czesc trackow mogla zostac zablokowana przez autoplay policy.', 'error')
+        pushToast('Crossfade finished. Some tracks may have been blocked by autoplay policy.', 'error')
       }
     }, fadeDurationMs + 50)
   }
@@ -1288,58 +1104,15 @@ function App() {
     setDraggedOverTrackId(null)
   }
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
-
-      if (event.code === 'Space' && event.shiftKey) {
-        event.preventDefault()
-        handleStopAll()
-        pushToast('Panic przez hotkey Shift+Space.')
-        return
-      }
-
-      if (event.code === 'Space') {
-        event.preventDefault()
-        if (sceneTracks.some((track) => track.isPlaying)) {
-          handleStopAll()
-        } else {
-          void handlePlayAll()
-        }
-        return
-      }
-
-      const numericKey = Number(event.key)
-      if (Number.isInteger(numericKey) && numericKey >= 1 && numericKey <= 9) {
-        event.preventDefault()
-        const scene = scenes[numericKey - 1]
-        if (scene) {
-          void handleSceneSelect(scene.id)
-        }
-        return
-      }
-
-      const pressedHotkey = normalizeHotkey(eventToHotkey(event))
-      const mappedTrack = sceneTracks.find((track) => normalizeHotkey(track.hotkey) === pressedHotkey)
-      if (mappedTrack) {
-        event.preventDefault()
-        void handleTogglePlay(mappedTrack)
-        return
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sceneTracks, activeScene, scenes])
+  useGlobalHotkeys({
+    sceneTracks,
+    scenes,
+    onStopAll: handleStopAll,
+    onPlayAll: handlePlayAll,
+    onSceneSelect: handleSceneSelect,
+    onToggleTrackPlay: handleTogglePlay,
+    onToast: pushToast,
+  })
 
   return (
     <main
@@ -1385,585 +1158,154 @@ function App() {
         }
       }}
     >
-      <Card className="border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-amber-500/20 backdrop-blur-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-3xl tracking-wide">TTRPG Sound Manager</CardTitle>
-          <CardDescription className="text-zinc-300">
-            Top: ustawienia globalne. Lewy panel: sceny. Prawy panel: wszystkie dzwieki.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">
-          <div className="grid gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/80 p-2.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" className={BUTTON_UNIFIED_CLASS} onClick={() => void handlePlayAll()}>
-                <Play className="size-4" /> Play Scene
-              </Button>
-              <Button variant="outline" className={BUTTON_UNIFIED_CLASS} onClick={handleStopAll}>
-                <Pause className="size-4" /> Stop All
-              </Button>
-              <Button variant="outline" className={BUTTON_UNIFIED_CLASS} onClick={handleStopAll}>
-                <Skull className="size-4" /> Panic
-              </Button>
-            </div>
-            <label className="grid gap-2 text-sm">
-              Master Volume: <span className="font-semibold">{masterVolume}%</span>
-              <Slider
-                className="[&_[data-slot='slider-track']]:bg-zinc-700 [&_[data-slot='slider-range']]:bg-amber-300 [&_[data-slot='slider-thumb']]:border-amber-100 [&_[data-slot='slider-thumb']]:bg-zinc-100"
-                value={[masterVolume]}
-                onValueChange={(value) => setMasterVolume(sliderToNumber(value))}
-                min={0}
-                max={100}
-                step={1}
-              />
-            </label>
-          </div>
-
-          <div className="grid gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/80 p-2.5">
-            <label className="grid gap-1 text-sm">
-              Crossfade: <span className="font-semibold">{crossfadeDurationMs} ms</span>
-              <Slider
-                className="[&_[data-slot='slider-track']]:bg-zinc-700 [&_[data-slot='slider-range']]:bg-sky-300 [&_[data-slot='slider-thumb']]:border-sky-100 [&_[data-slot='slider-thumb']]:bg-zinc-100"
-                value={[crossfadeDurationMs]}
-                min={200}
-                max={5000}
-                step={100}
-                onValueChange={(value) => setCrossfadeDurationMs(sliderToNumber(value))}
-              />
-            </label>
-            <div className="grid gap-1 text-xs text-zinc-300">
-              <label className="inline-flex items-center justify-between gap-2 rounded border border-zinc-700 px-2 py-1">
-                Ambient
-                <Switch
-                  className="data-checked:bg-emerald-300 data-unchecked:bg-zinc-600 [&_[data-slot='switch-thumb']]:bg-zinc-100 data-checked:[&_[data-slot='switch-thumb']]:bg-zinc-900"
-                  checked={crossfadeLayers.ambient}
-                  onCheckedChange={(checked) => toggleCrossfadeLayer('ambient', checked)}
-                />
-              </label>
-              <label className="inline-flex items-center justify-between gap-2 rounded border border-zinc-700 px-2 py-1">
-                Music
-                <Switch
-                  className="data-checked:bg-emerald-300 data-unchecked:bg-zinc-600 [&_[data-slot='switch-thumb']]:bg-zinc-100 data-checked:[&_[data-slot='switch-thumb']]:bg-zinc-900"
-                  checked={crossfadeLayers.music}
-                  onCheckedChange={(checked) => toggleCrossfadeLayer('music', checked)}
-                />
-              </label>
-              <label className="inline-flex items-center justify-between gap-2 rounded border border-zinc-700 px-2 py-1">
-                SFX
-                <Switch
-                  className="data-checked:bg-emerald-300 data-unchecked:bg-zinc-600 [&_[data-slot='switch-thumb']]:bg-zinc-100 data-checked:[&_[data-slot='switch-thumb']]:bg-zinc-900"
-                  checked={crossfadeLayers.sfx}
-                  onCheckedChange={(checked) => toggleCrossfadeLayer('sfx', checked)}
-                />
-              </label>
-            </div>
-          </div>
-
-          <div className="grid gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/80 p-2.5">
-            <input
-              ref={fileInputRef}
-              className="hidden"
-              type="file"
-              accept="audio/*"
-              multiple
-              onChange={(event) => {
-                void handleFilesImported(event.currentTarget.files)
-                event.currentTarget.value = ''
-              }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              className={BUTTON_UNIFIED_CLASS}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="size-4" /> Wybierz pliki audio
-            </Button>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Link YouTube"
-                value={youtubeInput}
-                onChange={(event) => setYoutubeInput(event.currentTarget.value)}
-              />
-              <Button variant="outline" className={BUTTON_UNIFIED_CLASS} onClick={handleAddYouTubeTrack}>
-                <Link2 className="size-4" /> Dodaj
-              </Button>
-            </div>
-            <div className="text-xs text-zinc-300">Formaty: MP3, WAV, OGG, M4A</div>
-            <div className="grid gap-1 rounded-md border border-zinc-700/60 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-300">
-              <div className="inline-flex items-center gap-2 font-medium text-zinc-200">
-                <Keyboard className="size-3.5" /> Presety hotkey
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" className={BUTTON_UNIFIED_CLASS} onClick={() => applyHotkeyPreset('combat')}>Combat</Button>
-                <Button size="sm" variant="outline" className={BUTTON_UNIFIED_CLASS} onClick={() => applyHotkeyPreset('exploration')}>Exploration</Button>
-                <Button size="sm" variant="outline" className={BUTTON_UNIFIED_CLASS} onClick={() => applyHotkeyPreset('horror')}>Horror</Button>
-              </div>
-              <div>Space: Play Scene / Stop All</div>
-              <div>Shift+Space: Panic</div>
-              <div>1-9: Przelaczanie scen wg kolejnosci na liscie</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <TopControlsCard
+        masterVolume={masterVolume}
+        crossfadeDurationMs={crossfadeDurationMs}
+        crossfadeLayers={crossfadeLayers}
+        youtubeInput={youtubeInput}
+        fileInputRef={fileInputRef}
+        buttonClassName={BUTTON_UNIFIED_CLASS}
+        onMasterVolumeChange={setMasterVolume}
+        onCrossfadeDurationChange={setCrossfadeDurationMs}
+        onToggleCrossfadeLayer={toggleCrossfadeLayer}
+        onFilesImported={(files) => {
+          void handleFilesImported(files)
+        }}
+        onYoutubeInputChange={setYoutubeInput}
+        onAddYouTubeTrack={handleAddYouTubeTrack}
+        onPlayScene={() => {
+          void handlePlayAll()
+        }}
+        onStopAll={handleStopAll}
+        onPanic={handleStopAll}
+        onApplyHotkeyPreset={applyHotkeyPreset}
+      />
 
       <section className="grid flex-1 gap-4 lg:grid-cols-[260px_1fr_460px]">
-        <Card className="border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-amber-500/15 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">Scenes</CardTitle>
-            <CardDescription>Panel po lewej stronie</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nowa scena"
-                value={newSceneName}
-                onChange={(event) => setNewSceneName(event.currentTarget.value)}
-              />
-              <Button size="icon" variant="outline" className={BUTTON_UNIFIED_CLASS} onClick={handleCreateScene} aria-label="Dodaj scene">
-                <Plus className="size-4" />
-              </Button>
-            </div>
-            <ScrollArea className="h-[60vh] rounded-md border border-zinc-700/50 p-2">
-              <div className="grid gap-2">
-                {scenes.map((scene) => (
-                  <div
-                    key={scene.id}
-                    className="grid h-[74px] cursor-pointer gap-1 rounded-md border border-zinc-700/60 bg-zinc-900/70 p-1.5"
-                    onClick={() => {
-                      if (editingSceneId !== scene.id) {
-                        void handleSceneSelect(scene.id)
-                      }
-                    }}
-                  >
-                    {editingSceneId === scene.id ? (
-                      <div className="flex items-center gap-1">
-                        <Input
-                          className="h-8"
-                          value={editingSceneName}
-                          onChange={(event) => setEditingSceneName(event.currentTarget.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              handleSaveSceneRename()
-                            }
-                            if (event.key === 'Escape') {
-                              handleCancelSceneRename()
-                            }
-                          }}
-                        />
-                        <Button
-                          size="icon-xs"
-                          variant="outline"
-                          className={BUTTON_UNIFIED_CLASS}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleSaveSceneRename()
-                          }}
-                          aria-label="Zapisz nazwe sceny"
-                        >
-                          <Check className="size-3" />
-                        </Button>
-                        <Button
-                          size="icon-xs"
-                          variant="outline"
-                          className={BUTTON_UNIFIED_CLASS}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleCancelSceneRename()
-                          }}
-                          aria-label="Anuluj edycje sceny"
-                        >
-                          <X className="size-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <Button
-                          variant={scene.id === activeScene?.id ? 'default' : 'outline'}
-                          className={
-                            scene.id === activeScene?.id
-                              ? `justify-between ${BUTTON_ACTIVE_CLASS}`
-                              : `justify-between ${BUTTON_UNIFIED_CLASS}`
-                          }
-                          onClick={() => {
-                            void handleSceneSelect(scene.id)
-                          }}
-                        >
-                          <span className="font-medium tracking-wide">{scene.name}</span>
-                          <Badge variant="secondary">{scene.trackIds.length}</Badge>
-                        </Button>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="icon-xs"
-                            variant="outline"
-                            className={BUTTON_UNIFIED_CLASS}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              handleStartSceneRename(scene)
-                            }}
-                            aria-label={`Edytuj scene ${scene.name}`}
-                          >
-                            <Pencil className="size-3" />
-                          </Button>
-                          <Button
-                            size="icon-xs"
-                            variant="outline"
-                            className={BUTTON_UNIFIED_CLASS}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              handleDeleteScene(scene.id)
-                            }}
-                            aria-label={`Usun scene ${scene.name}`}
-                          >
-                            <Trash2 className="size-3" />
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+        <ScenesCard
+          scenes={scenes}
+          activeSceneId={activeScene?.id ?? activeSceneId}
+          newSceneName={newSceneName}
+          editingSceneId={editingSceneId}
+          editingSceneName={editingSceneName}
+          buttonClassName={BUTTON_UNIFIED_CLASS}
+          activeButtonClassName={BUTTON_ACTIVE_CLASS}
+          onNewSceneNameChange={setNewSceneName}
+          onCreateScene={handleCreateScene}
+          onSceneSelect={(sceneId) => {
+            void handleSceneSelect(sceneId)
+          }}
+          onStartSceneRename={handleStartSceneRename}
+          onEditingSceneNameChange={setEditingSceneName}
+          onSaveSceneRename={handleSaveSceneRename}
+          onCancelSceneRename={handleCancelSceneRename}
+          onDeleteScene={handleDeleteScene}
+        />
 
-        <Card className="border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-sky-500/20 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle>Aktywna scena: {activeScene ? activeScene.name : '-'}</CardTitle>
-            <CardDescription>Tracki przypiete do sceny i ich pelna kontrola</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {sceneTracks.length === 0 ? (
-              <div
-                className="rounded-lg border border-dashed border-zinc-700 p-6 text-sm text-zinc-400"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  const payload = parseDragPayload(event.dataTransfer.getData('text/plain'))
-                  if (payload?.source === 'library') {
-                    addTrackToActiveScene(payload.trackId)
-                    pushToast('Dodano dzwiek do aktywnej sceny.')
-                  }
-                }}
-              >
-                Brak trackow w tej scenie. Dodaj je z prawego panelu Wszystkie dzwieki.
-              </div>
-            ) : (
-              sceneTracks.map((track) => (
-                <div
-                  key={track.id}
-                  data-track-card={track.id}
-                  className={`grid gap-3 rounded-lg border border-zinc-700/60 bg-zinc-900/80 p-3 md:grid-cols-[1.2fr_1fr_auto] ${
-                    draggedOverTrackId === track.id ? 'ring-2 ring-sky-300/70' : ''
-                  } ${
-                    draggedTrackId === track.id ? 'scale-[0.99] opacity-70 ring-2 ring-sky-300/60 transition' : ''
-                  }`}
-                  onDragEnter={() => setDraggedOverTrackId(track.id)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDragLeave={() => setDraggedOverTrackId((previous) => (previous === track.id ? null : previous))}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    const payload = parseDragPayload(event.dataTransfer.getData('text/plain'))
+        <ActiveSceneCard
+          activeSceneName={activeScene?.name ?? ''}
+          sceneTracks={sceneTracks}
+          draggedTrackId={draggedTrackId}
+          draggedOverTrackId={draggedOverTrackId}
+          buttonClassName={BUTTON_UNIFIED_CLASS}
+          activeButtonClassName={BUTTON_ACTIVE_CLASS}
+          onSceneDragEnter={setDraggedOverTrackId}
+          onSceneDragLeave={(trackId) => setDraggedOverTrackId((previous) => (previous === trackId ? null : previous))}
+          onSceneTrackDrop={(event, targetTrackId) => {
+            event.preventDefault()
+            const payload = parseDragPayload(event.dataTransfer.getData('text/plain'))
 
-                    if (payload?.source === 'scene') {
-                      moveTrackInActiveScene(payload.trackId, track.id)
-                    }
+            if (payload?.source === 'scene') {
+              moveTrackInActiveScene(payload.trackId, targetTrackId)
+            }
 
-                    if (payload?.source === 'library') {
-                      addTrackToActiveScene(payload.trackId, track.id)
-                      pushToast('Dodano dzwiek do aktywnej sceny.')
-                    }
+            if (payload?.source === 'library') {
+              addTrackToActiveScene(payload.trackId, targetTrackId)
+              pushToast('Added track to the active scene.')
+            }
 
-                    if (!payload && draggedTrackId) {
-                      moveTrackInActiveScene(draggedTrackId, track.id)
-                    }
+            if (!payload && draggedTrackId) {
+              moveTrackInActiveScene(draggedTrackId, targetTrackId)
+            }
 
-                    setDraggedTrackId(null)
-                    setDraggedOverTrackId(null)
-                  }}
-                >
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        draggable
-                        className="inline-flex h-6 w-6 cursor-grab items-center justify-center rounded border border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 active:cursor-grabbing"
-                        onDragStart={(event) => {
-                          event.dataTransfer.effectAllowed = 'move'
-                          event.dataTransfer.setData('text/plain', buildDragPayload('scene', track.id))
+            setDraggedTrackId(null)
+            setDraggedOverTrackId(null)
+          }}
+          onEmptyDrop={(event) => {
+            event.preventDefault()
+            const payload = parseDragPayload(event.dataTransfer.getData('text/plain'))
+            if (payload?.source === 'library') {
+              addTrackToActiveScene(payload.trackId)
+              pushToast('Added track to the active scene.')
+            }
+          }}
+          onSceneTrackDragStart={(event, trackId) => {
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', buildDragPayload('scene', trackId))
 
-                          const trackCard = event.currentTarget.closest('[data-track-card]') as HTMLElement | null
-                          if (trackCard) {
-                            setTrackCardDragPreview(event, trackCard)
-                          }
+            const trackCard = event.currentTarget.closest('[data-track-card]') as HTMLElement | null
+            if (trackCard) {
+              setTrackCardDragPreview(event, trackCard)
+            }
 
-                          setDraggedTrackId(track.id)
-                        }}
-                        onDragEnd={() => {
-                          setDraggedTrackId(null)
-                          setDraggedOverTrackId(null)
-                        }}
-                        aria-label={`Przeciagnij track ${track.name}`}
-                      >
-                        <GripVertical className="size-3.5" />
-                      </button>
-                      <h3 className="text-sm font-medium text-zinc-100">{track.name}</h3>
-                      <Badge
-                        variant={track.isPlaying ? 'default' : 'outline'}
-                          className={track.isPlaying ? 'bg-emerald-300 text-zinc-950' : 'border-zinc-300 bg-zinc-800 text-zinc-50'}
-                      >
-                        {track.isPlaying ? 'LIVE' : 'IDLE'}
-                      </Badge>
-                      <Badge variant="secondary">{track.layer.toUpperCase()}</Badge>
-                      <Badge variant="outline" className="border-zinc-500 bg-zinc-800 text-zinc-200">
-                        {track.sourceType === 'youtube' ? 'YOUTUBE' : 'LOCAL'}
-                      </Badge>
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">drag handle to reorder</span>
-                    </div>
-                    {track.sourceType === 'youtube' && track.isPlaying ? (
-                      <div className="rounded-md border border-zinc-700 bg-zinc-950/70 px-2 py-1 text-xs text-zinc-300">
-                        YouTube audio aktywne
-                      </div>
-                    ) : null}
-                    <label className="grid gap-1 text-xs text-zinc-300">
-                      Volume: {track.volume}%
-                      {getTrackOutputVolume(track) !== track.volume ? (
-                        <span className="text-[11px] text-amber-300">Crossfade output: {getTrackOutputVolume(track)}%</span>
-                      ) : null}
-                      <Slider
-                        className="[&_[data-slot='slider-track']]:bg-zinc-700 [&_[data-slot='slider-range']]:bg-emerald-300 [&_[data-slot='slider-thumb']]:border-emerald-100 [&_[data-slot='slider-thumb']]:bg-zinc-100"
-                        value={[track.volume]}
-                        min={0}
-                        max={100}
-                        step={1}
-                        onValueChange={(value) => {
-                          const nextVolume = sliderToNumber(value)
-                          updateTrack(track.id, (current) => ({ ...current, volume: nextVolume }))
-                        }}
-                      />
-                    </label>
-                  </div>
+            setDraggedTrackId(trackId)
+          }}
+          onSceneTrackDragEnd={() => {
+            setDraggedTrackId(null)
+            setDraggedOverTrackId(null)
+          }}
+          onTrackTogglePlay={(track) => {
+            void handleTogglePlay(track)
+          }}
+          onTrackDelete={(track) => {
+            void handleDeleteTrack(track)
+          }}
+          onTrackVolumeChange={(trackId, nextVolume) => {
+            updateTrack(trackId, (current) => ({ ...current, volume: nextVolume }))
+          }}
+          onTrackLoopChange={(trackId, checked) => {
+            updateTrack(trackId, (current) => ({
+              ...current,
+              loop: checked,
+            }))
+          }}
+          onTrackLayerChange={handleLayerChange}
+          onTrackHotkeyChange={handleHotkeyChange}
+          getTrackOutputVolume={getTrackOutputVolume}
+        />
 
-                  <div className="grid content-center gap-2 text-xs text-zinc-300">
-                    <label className="inline-flex items-center justify-between gap-2 rounded-md border border-zinc-700 px-2 py-1">
-                      Loop
-                      <Switch
-                        checked={track.loop}
-                        onCheckedChange={(checked) => {
-                          updateTrack(track.id, (current) => ({
-                            ...current,
-                            loop: checked,
-                          }))
-                        }}
-                      />
-                    </label>
-
-                    <label className="grid gap-1">
-                      Layer
-                      <select
-                        className="h-8 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-sm"
-                        value={track.layer}
-                        onChange={(event) => handleLayerChange(track.id, event.currentTarget.value as TrackLayer)}
-                      >
-                        <option value="ambient">Ambient</option>
-                        <option value="music">Music</option>
-                        <option value="sfx">SFX</option>
-                      </select>
-                    </label>
-
-                    <label className="grid gap-1">
-                      Hotkey
-                      <Input
-                        className="h-8 border-zinc-700 bg-zinc-900 text-xs"
-                        placeholder="np. a, ctrl+1, shift+g"
-                        value={track.hotkey}
-                        onChange={(event) => handleHotkeyChange(track.id, event.currentTarget.value)}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      className={track.isPlaying ? BUTTON_ACTIVE_CLASS : BUTTON_UNIFIED_CLASS}
-                      onClick={() => {
-                        void handleTogglePlay(track)
-                      }}
-                    >
-                      {track.isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
-                      {track.isPlaying ? 'Stop' : 'Play'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className={BUTTON_UNIFIED_CLASS}
-                      onClick={() => {
-                        void handleDeleteTrack(track)
-                      }}
-                      aria-label={`Usun track ${track.name}`}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-violet-500/20 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle>Wszystkie dzwieki</CardTitle>
-            <CardDescription>Panel po prawej stronie, biblioteka globalna</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-3 grid gap-2">
-              <label className="relative">
-                <Search className="pointer-events-none absolute left-2 top-2.5 size-4 text-zinc-400" />
-                <Input
-                  className="pl-8"
-                  placeholder="Szukaj dzwieku"
-                  value={librarySearch}
-                  onChange={(event) => setLibrarySearch(event.currentTarget.value)}
-                />
-              </label>
-              <select
-                className="h-8 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-200"
-                value={libraryLayerFilter}
-                onChange={(event) => setLibraryLayerFilter(event.currentTarget.value as 'all' | TrackLayer)}
-              >
-                <option value="all">Wszystkie warstwy</option>
-                <option value="ambient">Ambient</option>
-                <option value="music">Music</option>
-                <option value="sfx">SFX</option>
-              </select>
-            </div>
-            <ScrollArea className="h-[66vh] rounded-md border border-zinc-700/50 p-2">
-              <div className="grid gap-2">
-                {filteredLibraryTracks.length === 0 ? (
-                  <div className="rounded border border-dashed border-zinc-700 p-4 text-xs text-zinc-400">
-                    Brak dzwiekow dla wybranych filtrow.
-                  </div>
-                ) : (
-                  filteredLibraryTracks.map((track) => (
-                    <div
-                      key={track.id}
-                      className="grid gap-2 rounded border border-zinc-700/70 bg-zinc-900/80 p-2"
-                      draggable
-                      onDragStart={(event) => {
-                        event.dataTransfer.effectAllowed = 'copyMove'
-                        event.dataTransfer.setData('text/plain', buildDragPayload('library', track.id))
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-zinc-100">{track.name}</div>
-                          <div className="text-[11px] text-zinc-400">
-                            {track.layer.toUpperCase()} | {track.sourceType === 'youtube' ? 'YOUTUBE' : 'LOCAL'}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="icon-xs"
-                            variant={track.favorite ? 'secondary' : 'outline'}
-                            className={track.favorite ? BUTTON_ACTIVE_CLASS : BUTTON_UNIFIED_CLASS}
-                            onClick={() => handleToggleFavorite(track.id)}
-                            aria-label={`Ulubiony ${track.name}`}
-                          >
-                            <Star className={`size-3 ${track.favorite ? 'fill-current' : ''}`} />
-                          </Button>
-                          <Badge
-                            variant={track.isPlaying ? 'default' : 'outline'}
-                            className={track.isPlaying ? 'bg-emerald-300 text-zinc-950' : 'border-zinc-300 bg-zinc-800 text-zinc-50'}
-                          >
-                          {track.isPlaying ? 'LIVE' : 'IDLE'}
-                          </Badge>
-                        </div>
-                      </div>
-                      <Input
-                        className="h-8 border-zinc-700 bg-zinc-900 text-zinc-100"
-                        value={track.name}
-                        onChange={(event) => handleRenameTrack(track.id, event.currentTarget.value)}
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant={activeSceneTrackIdSet.has(track.id) ? 'secondary' : 'outline'}
-                          className={
-                            activeSceneTrackIdSet.has(track.id)
-                              ? `flex-1 ${BUTTON_ACTIVE_CLASS}`
-                              : `flex-1 ${BUTTON_UNIFIED_CLASS}`
-                          }
-                          onClick={() => handleToggleTrackInActiveScene(track.id)}
-                        >
-                          {activeSceneTrackIdSet.has(track.id) ? 'Usun ze sceny' : 'Dodaj do sceny'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className={BUTTON_UNIFIED_CLASS}
-                          onClick={() => {
-                            void handleTogglePlay(track)
-                          }}
-                        >
-                          {track.isPlaying ? 'Stop' : 'Play'}
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+        <SoundLibraryCard
+          filteredLibraryTracks={filteredLibraryTracks}
+          librarySearch={librarySearch}
+          libraryLayerFilter={libraryLayerFilter}
+          activeSceneTrackIdSet={activeSceneTrackIdSet}
+          buttonClassName={BUTTON_UNIFIED_CLASS}
+          activeButtonClassName={BUTTON_ACTIVE_CLASS}
+          onLibrarySearchChange={setLibrarySearch}
+          onLayerFilterChange={setLibraryLayerFilter}
+          onLibraryTrackDragStart={(event, trackId) => {
+            event.dataTransfer.effectAllowed = 'copyMove'
+            event.dataTransfer.setData('text/plain', buildDragPayload('library', trackId))
+          }}
+          onToggleFavorite={handleToggleFavorite}
+          onRenameTrack={handleRenameTrack}
+          onToggleTrackInScene={handleToggleTrackInActiveScene}
+          onTogglePlay={(track) => {
+            void handleTogglePlay(track)
+          }}
+        />
       </section>
 
       <Separator />
       <p className="pb-2 text-center text-xs text-zinc-400">
-        Układ: gora ustawienia | lewy panel sceny | prawy panel wszystkie dzwieki.
+        Layout: top controls | left scenes panel | right sound library.
       </p>
 
-      {isFileDragOver ? (
-        <div className="pointer-events-none absolute inset-4 z-40 rounded-xl border-2 border-dashed border-sky-300 bg-sky-300/15">
-          <div className="flex h-full items-center justify-center">
-            <div className="rounded-md border border-sky-200/60 bg-zinc-900/80 px-4 py-2 text-sm font-medium text-sky-100">
-              Upusc pliki audio, aby je dodac do aktywnej sceny
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <FileDropOverlay visible={isFileDragOver} />
 
-      <div className="pointer-events-none fixed right-4 top-4 z-50 grid gap-2">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`pointer-events-auto inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm shadow-lg backdrop-blur ${
-              toast.tone === 'error'
-                ? 'border-red-300/40 bg-red-500/20 text-red-100'
-                : 'border-emerald-300/40 bg-emerald-500/20 text-emerald-100'
-            }`}
-          >
-            <AlertTriangle className="size-4" />
-            <span>{toast.text}</span>
-          </div>
-        ))}
-      </div>
+      <ToastStack toasts={toasts} />
 
-      <div className="hidden" aria-hidden="true">
-        {tracks
-          .filter((track) => track.sourceType === 'youtube')
-          .map((track) => (
-            <div
-              key={`youtube-host-${track.id}`}
-              ref={(element) => {
-                if (element) {
-                  youtubeHostRefs.current.set(track.id, element)
-                } else {
-                  youtubeHostRefs.current.delete(track.id)
-                }
-              }}
-            />
-          ))}
-      </div>
+      <YouTubeHostsMount tracks={tracks} youtubeHostRefs={youtubeHostRefs} />
     </main>
   )
 }
