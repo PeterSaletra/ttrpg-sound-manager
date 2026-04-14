@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import type { Track, TrackLayer } from '@/types'
@@ -33,7 +32,7 @@ type ActiveSceneCardProps = {
   onTrackVolumeChange: (trackId: string, nextVolume: number) => void
   onTrackLoopChange: (trackId: string, checked: boolean) => void
   onTrackLayerChange: (trackId: string, layer: TrackLayer) => void
-  onTrackHotkeyChange: (trackId: string, value: string) => void
+  getTrackShortcut: (trackIndex: number) => string
   getTrackOutputVolume: (track: Track) => number
 }
 
@@ -58,7 +57,7 @@ export function ActiveSceneCard({
   onTrackVolumeChange,
   onTrackLoopChange,
   onTrackLayerChange,
-  onTrackHotkeyChange,
+  getTrackShortcut,
   getTrackOutputVolume,
 }: ActiveSceneCardProps) {
   return (
@@ -77,7 +76,7 @@ export function ActiveSceneCard({
             No tracks in this scene yet. Add tracks from the right-side Sound Library panel.
           </div>
         ) : (
-          sceneTracks.map((track) => (
+          sceneTracks.map((track, index) => (
             <div
               key={track.id}
               data-track-card={track.id}
@@ -163,15 +162,12 @@ export function ActiveSceneCard({
                   </select>
                 </label>
 
-                <label className="grid gap-1">
-                  Hotkey
-                  <Input
-                    className="h-8 border-zinc-700 bg-zinc-900 text-xs"
-                    placeholder="e.g. a, ctrl+1, shift+g"
-                    value={track.hotkey}
-                    onChange={(event) => onTrackHotkeyChange(track.id, event.currentTarget.value)}
-                  />
-                </label>
+                <div className="grid gap-1">
+                  <span>Hotkey</span>
+                  <div className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200">
+                    {getTrackShortcut(index) || '-'}
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">

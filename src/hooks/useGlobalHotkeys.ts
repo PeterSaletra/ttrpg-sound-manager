@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 
-import { eventToHotkey, normalizeHotkey } from '@/lib/app-helpers'
 import type { Scene, Track } from '@/types'
 
 type UseGlobalHotkeysParams = {
   sceneTracks: Track[]
   scenes: Scene[]
+  sceneShortcutKeys: string[]
+  trackShortcutKeys: string[]
   onStopAll: () => void
   onPlayAll: () => Promise<void>
   onSceneSelect: (sceneId: string) => Promise<void>
@@ -16,6 +17,8 @@ type UseGlobalHotkeysParams = {
 export function useGlobalHotkeys({
   sceneTracks,
   scenes,
+  sceneShortcutKeys,
+  trackShortcutKeys,
   onStopAll,
   onPlayAll,
   onSceneSelect,
@@ -52,18 +55,23 @@ export function useGlobalHotkeys({
         return
       }
 
-      const numericKey = Number(event.key)
-      if (Number.isInteger(numericKey) && numericKey >= 1 && numericKey <= 9) {
+      const sceneIndex = sceneShortcutKeys.indexOf(event.key)
+      if (sceneIndex >= 0) {
         event.preventDefault()
-        const scene = scenes[numericKey - 1]
+        const scene = scenes[sceneIndex]
         if (scene) {
           void onSceneSelect(scene.id)
         }
         return
       }
 
-      const pressedHotkey = normalizeHotkey(eventToHotkey(event))
-      const mappedTrack = sceneTracks.find((track) => normalizeHotkey(track.hotkey) === pressedHotkey)
+      const pressedKey = event.key.toLowerCase()
+      const trackIndex = trackShortcutKeys.indexOf(pressedKey)
+      if (trackIndex < 0) {
+        return
+      }
+
+      const mappedTrack = sceneTracks[trackIndex]
       if (mappedTrack) {
         event.preventDefault()
         void onToggleTrackPlay(mappedTrack)
@@ -72,5 +80,15 @@ export function useGlobalHotkeys({
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onPlayAll, onSceneSelect, onStopAll, onToast, onToggleTrackPlay, sceneTracks, scenes])
+  }, [
+    onPlayAll,
+    onSceneSelect,
+    onStopAll,
+    onToast,
+    onToggleTrackPlay,
+    sceneShortcutKeys,
+    sceneTracks,
+    scenes,
+    trackShortcutKeys,
+  ])
 }

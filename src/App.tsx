@@ -16,7 +16,8 @@ import {
   DEFAULT_CROSSFADE_DURATION_MS,
   DEFAULT_CROSSFADE_LAYERS,
   DEFAULT_LAYER,
-  HOTKEY_PRESETS,
+  SCENE_SHORTCUT_KEYS,
+  TRACK_SHORTCUT_KEYS,
 } from '@/lib/app-config'
 import {
   AUDIO_EXTENSION_REGEX,
@@ -25,7 +26,6 @@ import {
   createId,
   hasFilesInDragEvent,
   extractYouTubeId,
-  normalizeHotkey,
   parseDragPayload,
   setTrackCardDragPreview,
 } from '@/lib/app-helpers'
@@ -37,10 +37,12 @@ import {
   saveSession,
   toStoredTracks,
 } from '@/lib/storage'
+import { loadShortcutConfig, saveShortcutConfig } from '@/lib/shortcuts-storage'
 import type { YouTubePlayer } from '@/lib/youtube-types'
 import type { Scene, Track, TrackLayer } from '@/types'
 
 function App() {
+  const shortcutDefaults = loadShortcutConfig([...SCENE_SHORTCUT_KEYS], [...TRACK_SHORTCUT_KEYS])
   const [scenes, setScenes] = useState<Scene[]>(() => [createDefaultScene()])
   const [tracks, setTracks] = useState<Track[]>([])
   const [activeSceneId, setActiveSceneId] = useState<string>('')
@@ -54,6 +56,10 @@ function App() {
   const [librarySearch, setLibrarySearch] = useState<string>('')
   const [libraryLayerFilter, setLibraryLayerFilter] = useState<'all' | TrackLayer>('all')
   const [youtubeInput, setYoutubeInput] = useState<string>('')
+  const [sceneShortcutKeys, setSceneShortcutKeys] = useState<string[]>(shortcutDefaults.sceneShortcutKeys)
+  const [trackShortcutKeysByScene, setTrackShortcutKeysByScene] = useState<Record<string, string[]>>(
+    shortcutDefaults.trackShortcutKeysByScene,
+  )
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null)
   const [draggedOverTrackId, setDraggedOverTrackId] = useState<string | null>(null)
   const [editingSceneId, setEditingSceneId] = useState<string | null>(null)
@@ -92,6 +98,11 @@ function App() {
   const activeSceneTrackIdSet = useMemo(
     () => new Set(activeScene?.trackIds ?? []),
     [activeScene],
+  )
+
+  const activeSceneTrackShortcutKeys = useMemo(
+    () => (activeScene ? trackShortcutKeysByScene[activeScene.id] ?? [...TRACK_SHORTCUT_KEYS] : [...TRACK_SHORTCUT_KEYS]),
+    [activeScene, trackShortcutKeysByScene],
   )
 
   const filteredLibraryTracks = useMemo(() => {
@@ -734,18 +745,6 @@ function App() {
     }))
   }
 
-  const handleHotkeyChange = (trackId: string, value: string) => {
-    const normalized = normalizeHotkey(value)
-    const duplicate = sceneTracks.some((track) => track.id !== trackId && normalizeHotkey(track.hotkey) === normalized)
-
-    if (normalized && duplicate) {
-      pushToast(`Hotkey ${normalized} is already assigned in this scene.`, 'error')
-      return
-    }
-
-    updateTrack(trackId, (track) => ({ ...track, hotkey: normalized }))
-  }
-
   const handleRenameTrack = (trackId: string, name: string) => {
     updateTrack(trackId, (track) => ({
       ...track,
@@ -825,31 +824,6 @@ function App() {
         }
       }),
     )
-  }
-
-  const applyHotkeyPreset = (preset: keyof typeof HOTKEY_PRESETS) => {
-    if (!activeScene) {
-      return
-    }
-
-    const keys = HOTKEY_PRESETS[preset]
-    const indexMap = new Map<string, string>()
-    activeScene.trackIds.forEach((trackId, index) => {
-      indexMap.set(trackId, keys[index] ?? '')
-    })
-
-    setTracks((previous) =>
-      previous.map((track) =>
-        indexMap.has(track.id)
-          ? {
-              ...track,
-              hotkey: indexMap.get(track.id) ?? '',
-            }
-          : track,
-      ),
-    )
-
-    pushToast(`Applied hotkey preset: ${preset}.`)
   }
 
   const toggleCrossfadeLayer = (layer: TrackLayer, checked: boolean) => {
@@ -1107,6 +1081,8 @@ function App() {
   useGlobalHotkeys({
     sceneTracks,
     scenes,
+    sceneShortcutKeys,
+    trackShortcutKeys: activeSceneTrackShortcutKeys,
     onStopAll: handleStopAll,
     onPlayAll: handlePlayAll,
     onSceneSelect: handleSceneSelect,
@@ -1178,7 +1154,28 @@ function App() {
         }}
         onStopAll={handleStopAll}
         onPanic={handleStopAll}
-        onApplyHotkeyPreset={applyHotkeyPreset}
+        sceneShortcutKeys={sceneShortcutKeys}
+        trackShortcutKeys={activeSceneTrackShortcutKeys}
+        scenes={scenes}
+        activeSceneId={activeScene?.id ?? ''}
+        activeSceneTracks={sceneTracks}
+        onSceneSelect={setActiveSceneId}
+        onSaveShortcuts={(nextSceneShortcutKeys, nextTrackShortcutKeys) => {
+          setSceneShortcutKeys(nextSceneShortcutKeys)
+          if (activeScene) {
+            setTrackShortcutKeysByScene((previous) => ({
+              ...previous,
+              [activeScene.id]: nextTrackShortcutKeys,
+            }))
+            saveShortcutConfig(nextSceneShortcutKeys, {
+              ...trackShortcutKeysByScene,
+              [activeScene.id]: nextTrackShortcutKeys,
+            })
+          } else {
+            saveShortcutConfig(nextSceneShortcutKeys, trackShortcutKeysByScene)
+          }
+          pushToast('Shortcut mappings updated.')
+        }}
       />
 
       <section className="grid flex-1 gap-4 lg:grid-cols-[260px_1fr_460px]">
@@ -1270,7 +1267,7 @@ function App() {
             }))
           }}
           onTrackLayerChange={handleLayerChange}
-          onTrackHotkeyChange={handleHotkeyChange}
+          getTrackShortcut={(trackIndex) => activeSceneTrackShortcutKeys[trackIndex] ?? ''}
           getTrackOutputVolume={getTrackOutputVolume}
         />
 
