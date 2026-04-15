@@ -1353,9 +1353,25 @@ function App() {
       </section>
 
       <Separator />
-      <p className="pb-2 text-center text-xs text-zinc-400">
-        Layout: top controls | left scenes panel | right sound library.
-      </p>
+      <div className="flex flex-wrap items-center justify-center gap-3 pb-2 text-xs text-zinc-400">
+        <span>Designed for quick scene mixing, instant control, and smooth live transitions.</span>
+        <a
+          href="https://github.com/PeterSaletra/ttrpg-sound-manager"
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-zinc-500 underline-offset-2 transition hover:text-zinc-200"
+        >
+          GitHub Repository
+        </a>
+        <a
+          href="https://github.com/PeterSaletra/ttrpg-sound-manager/issues"
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-zinc-500 underline-offset-2 transition hover:text-zinc-200"
+        >
+          Report a Bug
+        </a>
+      </div>
 
       <FileDropOverlay visible={isFileDragOver} />
 
