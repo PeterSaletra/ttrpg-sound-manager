@@ -15,6 +15,7 @@ import type { Scene } from '@/types'
 
 type ScenesCardProps = {
   scenes: Scene[]
+  sceneShortcutKeys: string[]
   activeSceneId: string
   newSceneName: string
   editingSceneId: string | null
@@ -33,6 +34,7 @@ type ScenesCardProps = {
 
 export function ScenesCard({
   scenes,
+  sceneShortcutKeys,
   activeSceneId,
   newSceneName,
   editingSceneId,
@@ -49,12 +51,12 @@ export function ScenesCard({
   onDeleteScene,
 }: ScenesCardProps) {
   return (
-    <Card className="border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-amber-500/15 backdrop-blur-sm">
+    <Card className="h-full border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-amber-500/15 backdrop-blur-sm">
       <CardHeader>
         <CardTitle className="text-xl">Scenes</CardTitle>
-        <CardDescription>Left side panel</CardDescription>
+        <CardDescription>Create, switch, and organize your encounter sound sets.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="flex gap-2">
           <Input
             placeholder="New scene"
@@ -65,9 +67,9 @@ export function ScenesCard({
             <Plus className="size-4" />
           </Button>
         </div>
-        <ScrollArea className="h-[60vh] rounded-md border border-zinc-700/50 p-2">
+        <ScrollArea className="min-h-0 flex-1 rounded-md border border-zinc-700/50 p-2">
           <div className="grid gap-2">
-            {scenes.map((scene) => (
+            {scenes.map((scene, index) => (
               <div
                 key={scene.id}
                 className="grid h-[74px] cursor-pointer gap-1 rounded-md border border-zinc-700/60 bg-zinc-900/70 p-1.5"
@@ -131,7 +133,7 @@ export function ScenesCard({
                       }}
                     >
                       <span className="font-medium tracking-wide">{scene.name}</span>
-                      <Badge variant="secondary">{scene.trackIds.length}</Badge>
+                      <Badge variant="secondary">{(sceneShortcutKeys[index] ?? '-').toUpperCase()}</Badge>
                     </Button>
                     <div className="flex justify-end gap-1">
                       <Button

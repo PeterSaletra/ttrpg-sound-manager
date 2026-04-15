@@ -621,6 +621,32 @@ function App() {
     })
   }
 
+  const handleRemoveTrackFromActiveScene = (track: Track) => {
+    if (!activeScene || !activeScene.trackIds.includes(track.id)) {
+      return
+    }
+
+    if (track.isPlaying) {
+      if (track.sourceType === 'local') {
+        audioEngineRef.current.stopTrack(track.id)
+      } else {
+        youtubePlayersRef.current.get(track.id)?.pauseVideo()
+      }
+      updateTrack(track.id, (current) => ({ ...current, isPlaying: false }))
+    }
+
+    setScenes((previous) =>
+      previous.map((scene) =>
+        scene.id === activeScene.id
+          ? {
+              ...scene,
+              trackIds: scene.trackIds.filter((trackId) => trackId !== track.id),
+            }
+          : scene,
+      ),
+    )
+  }
+
   const handleCreateScene = () => {
     const name = newSceneName.trim()
     if (!name) {
@@ -633,9 +659,23 @@ function App() {
       trackIds: [],
     }
 
+    const normalizedCurrentSceneShortcutKeys = sceneShortcutKeys
+      .slice(0, scenes.length)
+      .map((key) => key.trim().toLowerCase())
+    const usedKeys = new Set(normalizedCurrentSceneShortcutKeys.filter(Boolean))
+    const nextFreeShortcut = SCENE_SHORTCUT_KEYS.find((key) => !usedKeys.has(key))
+    const nextSceneShortcutKeys = [...normalizedCurrentSceneShortcutKeys, nextFreeShortcut ?? '']
+
     setScenes((previous) => [...previous, newScene])
+    setSceneShortcutKeys(nextSceneShortcutKeys)
     setActiveSceneId(newScene.id)
     setNewSceneName('')
+
+    saveShortcutConfig(nextSceneShortcutKeys, trackShortcutKeysByScene)
+
+    if (!nextFreeShortcut) {
+      pushToast('No free scene shortcuts left. Add one manually in Customize shortcuts.', 'info')
+    }
   }
 
   const handleStartSceneRename = (scene: Scene) => {
@@ -680,8 +720,23 @@ function App() {
       return
     }
 
+    const deletedSceneIndex = scenes.findIndex((scene) => scene.id === sceneId)
+    const normalizedCurrentSceneShortcutKeys = sceneShortcutKeys
+      .slice(0, scenes.length)
+      .map((key) => key.trim().toLowerCase())
+    const nextSceneShortcutKeys =
+      deletedSceneIndex >= 0
+        ? normalizedCurrentSceneShortcutKeys.filter((_, index) => index !== deletedSceneIndex)
+        : normalizedCurrentSceneShortcutKeys
+    const nextTrackShortcutKeysByScene = { ...trackShortcutKeysByScene }
+    delete nextTrackShortcutKeysByScene[sceneId]
+
     const fallbackScene = scenes.find((scene) => scene.id !== sceneId)
     setScenes((previous) => previous.filter((scene) => scene.id !== sceneId))
+    setSceneShortcutKeys(nextSceneShortcutKeys)
+    setTrackShortcutKeysByScene(nextTrackShortcutKeysByScene)
+
+    saveShortcutConfig(nextSceneShortcutKeys, nextTrackShortcutKeysByScene)
 
     if (activeSceneId === sceneId && fallbackScene) {
       setActiveSceneId(fallbackScene.id)
@@ -1178,9 +1233,10 @@ function App() {
         }}
       />
 
-      <section className="grid flex-1 gap-4 lg:grid-cols-[260px_1fr_460px]">
+      <section className="grid flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1.5fr)_minmax(0,0.85fr)]">
         <ScenesCard
           scenes={scenes}
+          sceneShortcutKeys={sceneShortcutKeys}
           activeSceneId={activeScene?.id ?? activeSceneId}
           newSceneName={newSceneName}
           editingSceneId={editingSceneId}
@@ -1254,8 +1310,8 @@ function App() {
           onTrackTogglePlay={(track) => {
             void handleTogglePlay(track)
           }}
-          onTrackDelete={(track) => {
-            void handleDeleteTrack(track)
+          onTrackRemoveFromScene={(track) => {
+            handleRemoveTrackFromActiveScene(track)
           }}
           onTrackVolumeChange={(trackId, nextVolume) => {
             updateTrack(trackId, (current) => ({ ...current, volume: nextVolume }))
@@ -1289,6 +1345,9 @@ function App() {
           onToggleTrackInScene={handleToggleTrackInActiveScene}
           onTogglePlay={(track) => {
             void handleTogglePlay(track)
+          }}
+          onDeleteTrack={(track) => {
+            void handleDeleteTrack(track)
           }}
         />
       </section>

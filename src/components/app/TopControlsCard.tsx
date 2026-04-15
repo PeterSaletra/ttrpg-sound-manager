@@ -164,7 +164,7 @@ export function TopControlsCard({
         <CardHeader className="pb-2">
           <CardTitle className="text-3xl tracking-wide">TTRPG Sound Manager</CardTitle>
           <CardDescription className="text-zinc-300">
-            Top: global controls. Left panel: scenes. Right panel: full sound library.
+            Build immersive soundscapes fast with scenes, layered tracks, and live controls.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">

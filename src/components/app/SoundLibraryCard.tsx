@@ -1,5 +1,5 @@
 import type { DragEvent } from 'react'
-import { Search, Star } from 'lucide-react'
+import { Search, Star, Trash2 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,7 @@ type SoundLibraryCardProps = {
   onRenameTrack: (trackId: string, name: string) => void
   onToggleTrackInScene: (trackId: string) => void
   onTogglePlay: (track: Track) => void
+  onDeleteTrack: (track: Track) => void
 }
 
 export function SoundLibraryCard({
@@ -44,14 +45,15 @@ export function SoundLibraryCard({
   onRenameTrack,
   onToggleTrackInScene,
   onTogglePlay,
+  onDeleteTrack,
 }: SoundLibraryCardProps) {
   return (
-    <Card className="border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-violet-500/20 backdrop-blur-sm">
+    <Card className="h-full border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-violet-500/20 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>Sound Library</CardTitle>
-        <CardDescription>Right-side global track library</CardDescription>
+        <CardDescription>Browse, tag, and manage all tracks across your scenes.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex min-h-0 flex-1 flex-col">
         <div className="mb-3 grid gap-2">
           <label className="relative">
             <Search className="pointer-events-none absolute left-2 top-2.5 size-4 text-zinc-400" />
@@ -73,7 +75,7 @@ export function SoundLibraryCard({
             <option value="sfx">SFX</option>
           </select>
         </div>
-        <ScrollArea className="h-[66vh] rounded-md border border-zinc-700/50 p-2">
+        <ScrollArea className="min-h-0 flex-1 rounded-md border border-zinc-700/50 p-2">
           <div className="grid gap-2">
             {filteredLibraryTracks.length === 0 ? (
               <div className="rounded border border-dashed border-zinc-700 p-4 text-xs text-zinc-400">
@@ -137,6 +139,15 @@ export function SoundLibraryCard({
                       onClick={() => onTogglePlay(track)}
                     >
                       {track.isPlaying ? 'Stop' : 'Play'}
+                    </Button>
+                    <Button
+                      size="icon-xs"
+                      variant="outline"
+                      className={buttonClassName}
+                      onClick={() => onDeleteTrack(track)}
+                      aria-label={`Delete track ${track.name} permanently`}
+                    >
+                      <Trash2 className="size-3" />
                     </Button>
                   </div>
                 </div>

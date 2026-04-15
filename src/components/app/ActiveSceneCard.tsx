@@ -28,7 +28,7 @@ type ActiveSceneCardProps = {
   onSceneTrackDragStart: (event: DragEvent<HTMLButtonElement>, trackId: string) => void
   onSceneTrackDragEnd: () => void
   onTrackTogglePlay: (track: Track) => void
-  onTrackDelete: (track: Track) => void
+  onTrackRemoveFromScene: (track: Track) => void
   onTrackVolumeChange: (trackId: string, nextVolume: number) => void
   onTrackLoopChange: (trackId: string, checked: boolean) => void
   onTrackLayerChange: (trackId: string, layer: TrackLayer) => void
@@ -53,7 +53,7 @@ export function ActiveSceneCard({
   onSceneTrackDragStart,
   onSceneTrackDragEnd,
   onTrackTogglePlay,
-  onTrackDelete,
+  onTrackRemoveFromScene,
   onTrackVolumeChange,
   onTrackLoopChange,
   onTrackLayerChange,
@@ -64,7 +64,7 @@ export function ActiveSceneCard({
     <Card className="border-0 bg-zinc-950/65 text-zinc-100 shadow-2xl ring-1 ring-sky-500/20 backdrop-blur-sm">
       <CardHeader>
         <CardTitle>Active Scene: {activeSceneName || '-'}</CardTitle>
-        <CardDescription>Tracks assigned to this scene with full controls</CardDescription>
+        <CardDescription>Control and mix the tracks currently active in this scene.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         {sceneTracks.length === 0 ? (
@@ -183,8 +183,8 @@ export function ActiveSceneCard({
                   variant="outline"
                   size="icon"
                   className={buttonClassName}
-                  onClick={() => onTrackDelete(track)}
-                  aria-label={`Delete track ${track.name}`}
+                  onClick={() => onTrackRemoveFromScene(track)}
+                  aria-label={`Remove track ${track.name} from active scene`}
                 >
                   <Trash2 className="size-4" />
                 </Button>
