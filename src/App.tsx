@@ -6,6 +6,7 @@ import { SoundLibraryCard } from '@/components/app/SoundLibraryCard'
 import { ToastStack } from '@/components/app/ToastStack'
 import { TopControlsCard } from '@/components/app/TopControlsCard'
 import { YouTubeHostsMount } from '@/components/app/YouTubeHostsMount'
+import { useExternalController } from '@/hooks/useExternalController'
 import { useGlobalHotkeys } from '@/hooks/useGlobalHotkeys'
 import { useToastQueue } from '@/hooks/useToastQueue'
 import { Separator } from '@/components/ui/separator'
@@ -1145,6 +1146,26 @@ function App() {
     onToast: pushToast,
   })
 
+  const externalController = useExternalController({
+    sceneCount: scenes.length,
+    onMasterVolumeChange: setMasterVolume,
+    onCrossfadeDurationChange: setCrossfadeDurationMs,
+    onPlay: () => {
+      void handlePlayAll()
+    },
+    onStop: handleStopAll,
+    onPanic: handleStopAll,
+    onSceneSelect: (sceneIndex) => {
+      const scene = scenes[sceneIndex]
+      if (!scene) {
+        return
+      }
+
+      void handleSceneSelect(scene.id)
+    },
+    onToast: pushToast,
+  })
+
   return (
     <main
       className="relative mx-auto flex min-h-screen w-full max-w-[1540px] flex-col gap-4 p-4 md:p-6"
@@ -1230,6 +1251,16 @@ function App() {
             saveShortcutConfig(nextSceneShortcutKeys, trackShortcutKeysByScene)
           }
           pushToast('Shortcut mappings updated.')
+        }}
+        controllerSupported={externalController.isSupported}
+        controllerConnected={externalController.isConnected}
+        controllerLabel={externalController.deviceLabel}
+        controllerError={externalController.lastError}
+        onControllerConnect={() => {
+          void externalController.connect()
+        }}
+        onControllerDisconnect={() => {
+          void externalController.disconnect()
         }}
       />
 

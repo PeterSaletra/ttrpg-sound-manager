@@ -40,6 +40,12 @@ type TopControlsCardProps = {
   trackShortcutKeys: string[]
   onSceneSelect: (sceneId: string) => void
   onSaveShortcuts: (sceneShortcutKeys: string[], trackShortcutKeys: string[]) => void
+  controllerSupported: boolean
+  controllerConnected: boolean
+  controllerLabel: string
+  controllerError: string
+  onControllerConnect: () => void
+  onControllerDisconnect: () => void
 }
 
 export function TopControlsCard({
@@ -65,6 +71,12 @@ export function TopControlsCard({
   trackShortcutKeys,
   onSceneSelect,
   onSaveShortcuts,
+  controllerSupported,
+  controllerConnected,
+  controllerLabel,
+  controllerError,
+  onControllerConnect,
+  onControllerDisconnect,
 }: TopControlsCardProps) {
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState<boolean>(false)
   const [sceneShortcutDrafts, setSceneShortcutDrafts] = useState<string[]>([])
@@ -273,6 +285,38 @@ export function TopControlsCard({
               <Button size="sm" variant="outline" className={buttonClassName} onClick={openShortcutModal}>
                 Customize shortcuts
               </Button>
+            </div>
+            <div className="grid gap-1 rounded-md border border-zinc-700/60 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-300">
+              <div className="font-medium text-zinc-200">External Controller</div>
+              <div>
+                {controllerSupported
+                  ? controllerConnected
+                    ? `Connected${controllerLabel ? `: ${controllerLabel}` : ''}`
+                    : 'Disconnected'
+                  : 'Web Serial not supported by this browser'}
+              </div>
+              {controllerError ? <div className="text-rose-300">{controllerError}</div> : null}
+              <div>Keyboard shortcuts and controller buttons can be used at the same time.</div>
+              {controllerConnected ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={buttonClassName}
+                  onClick={onControllerDisconnect}
+                >
+                  Disconnect Controller
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={buttonClassName}
+                  onClick={onControllerConnect}
+                  disabled={!controllerSupported}
+                >
+                  Connect Controller
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>

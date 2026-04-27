@@ -79,6 +79,55 @@ npm run preview
 - `Shift+Space`: panic stop
 - Custom per-track hotkeys are supported
 
+## Arduino Firmware Frame Format
+
+The external controller integration uses Web Serial and reads newline-delimited frames.
+Each frame should end with `\n` (or `\r\n`).
+
+### Supported text frames
+
+- `PLAY` or `BTN_PLAY`: play action
+- `STOP` or `BTN_STOP`: stop action
+- `PANIC` or `BTN_PANIC`: panic action
+- `MASTER:<value>` or `VOLUME:<value>` or `POT_MASTER:<value>`: master volume
+- `CROSSFADE:<value>` or `POT_CROSSFADE:<value>`: crossfade control
+- `SCENE:<value>` or `BTN_SCENE:<value>`: scene select
+
+### Supported JSON frames
+
+Each line can also be JSON with this shape:
+
+```json
+{"type":"master","value":512}
+{"type":"crossfade","value":600}
+{"type":"play"}
+{"type":"stop"}
+{"type":"panic"}
+{"type":"scene","value":2}
+```
+
+Allowed `type` values: `master`, `crossfade`, `play`, `stop`, `panic`, `scene`.
+
+### Value mapping
+
+- Master volume accepts:
+	- `0-100` as percent directly, or
+	- `0-1023` (Arduino analog range), auto-mapped to `0-100`
+- Crossfade accepts:
+	- `0-100` as percent (mapped to `200-5000 ms`), or
+	- `0-1023` auto-mapped to percent first
+- Scene values are 1-based in incoming frames:
+	- `1` selects the first scene, `2` the second, and so on
+
+### Example serial output from firmware
+
+```text
+POT_MASTER:742
+POT_CROSSFADE:210
+BTN_PLAY
+SCENE:3
+```
+
 ## Persistence
 
 The app stores session state in browser storage:
